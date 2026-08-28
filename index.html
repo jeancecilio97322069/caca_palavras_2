@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Mapa de Frota</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<style>
+:root{--painel:#fff;--borda:#d8ded6;--tinta:#1c2a20;--tinta2:#5a6b5e;--verde:#2e7d46;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+.raster-suave{image-rendering:auto;image-rendering:smooth}
+.cam[draggable=true],.subit[draggable=true]{cursor:grab}
+.cam.arrastando,.subit.arrastando{opacity:.45;cursor:grabbing}
+.cam.drop-alvo{box-shadow:inset 0 2px 0 var(--verde)}
+.subit.drop-alvo{box-shadow:inset 0 2px 0 var(--verde)}
+.pega{flex:none;width:16px;height:20px;display:flex;align-items:center;justify-content:center;
+  color:#c2ccc3;cursor:grab;touch-action:none;user-select:none}
+.pega:active{cursor:grabbing}
+.pega svg{width:12px;height:12px;pointer-events:none}
+html,body{height:100%}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;overflow:hidden}
+#mapa{position:absolute;inset:0;background:#fff}
+.cx{position:absolute;z-index:1000;background:var(--painel);border:1px solid var(--borda);
+  border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.13)}
+#painel{top:10px;right:10px;width:238px;max-height:calc(100% - 20px);display:flex;flex-direction:column}
+#painel h2{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--tinta2);
+  padding:10px 12px 6px;font-weight:700;display:flex;align-items:center;justify-content:space-between}
+#painel h2 .recolher{border:none;background:none;color:var(--tinta2);cursor:pointer;font-size:16px;line-height:1;padding:0 2px}
+#painel h2 .recolher:hover{color:var(--verde)}
+#painel.escondido{display:none}
+.subit .olho{flex:none;width:20px;height:20px;border:none;background:none;color:var(--tinta2);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.subit .olho svg{width:15px;height:15px}
+.subit.off span{color:#aab4ac;text-decoration:line-through}
+.subit.off .olho{color:#bcc5bd}
+#lista{overflow:auto;padding:0 8px 8px;flex:1 1 auto;min-height:60px}
+.subit>span{flex:1;min-width:0}
+.subit .ed{flex:none;width:24px;height:24px;border:none;background:none;color:var(--tinta2);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.subit .ed:hover{color:var(--verde)}
+.subit .ed svg{width:14px;height:14px}
+#painel-grip{position:absolute;left:0;bottom:0;width:20px;height:20px;cursor:nesw-resize;z-index:6;
+  touch-action:none;opacity:.55}
+#painel-grip:hover{opacity:1}
+#painel-grip svg{display:block;width:20px;height:20px;color:var(--tinta2)}
+.cam{display:flex;align-items:center;gap:4px;padding:3px 2px;border-radius:6px}
+.cam:hover{background:#f4f7f3}
+.cam label{display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer;padding:3px 2px}
+.cam label input{width:17px;height:17px;accent-color:var(--verde);flex:none}
+.cam i{flex:none}
+.cam .ed{flex:none;width:28px;height:28px;border:none;background:none;color:var(--tinta2);
+  border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.cam .ed:hover{background:#e6ede4;color:var(--verde)}
+.cam .ed svg{width:16px;height:16px}
+.cam .tr{width:30px;height:0;border-top-width:3px;border-top-style:solid}
+.cam .pt{width:11px;height:11px;border-radius:50%;border-width:2px;border-style:solid;margin:0 9px 0 10px}
+.cam .pg{width:22px;height:13px;border-width:2px;border-style:solid;margin:0 4px}
+.cam .im{width:22px;height:13px;background:linear-gradient(135deg,#8a8a5a,#5a7a4a);margin:0 4px;border-radius:2px}
+.cam .sv{width:22px;height:20px;margin:0 4px;display:flex;align-items:center;justify-content:center}
+.cam .sv img{max-width:20px;max-height:20px;object-fit:contain;display:block}
+.seta, .img-marker{background:none;border:none}
+.cam span{font-size:12px;color:var(--tinta);line-height:1.25;word-break:break-word}
+.rodape{border-top:1px solid var(--borda);padding:8px 12px;display:flex;flex-direction:column;gap:7px}
+.rodape label{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--tinta2);cursor:pointer}
+.rodape input{width:16px;height:16px;accent-color:var(--verde)}
+button.b{background:var(--verde);color:#fff;border:none;border-radius:7px;padding:8px;font-size:12px;
+  font-weight:600;cursor:pointer;width:100%}
+#titulo{left:10px;top:10px;padding:9px 12px;max-width:62%}
+#titulo b{font-size:13px;display:block}
+#titulo img{max-height:26px;max-width:90px;display:block;margin-bottom:5px}
+#norte{right:10px;bottom:38px;width:42px;height:52px;display:flex;align-items:center;justify-content:center}
+.leaflet-control-scale{position:absolute;right:10px;bottom:12px;margin:0!important}
+.leaflet-control-scale-line{border:1px solid var(--borda);border-top:none;background:rgba(255,255,255,.85);
+  color:var(--tinta);font:700 10px/1.4 system-ui,sans-serif;padding:1px 5px;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+#abrir{top:10px;right:10px;padding:9px 13px;font-size:12px;font-weight:700;color:var(--verde);
+  cursor:pointer;display:none}
+.rot{background:#e8720c;color:#fff;font-family:var(--mono);font-size:10px;font-weight:700;
+  padding:1px 4px;border-radius:3px;white-space:nowrap}
+.leaflet-tooltip.rot:before{display:none}
+.mini{display:flex;gap:6px}
+.mini button{flex:1;background:#eef3ec;color:var(--tinta2);border:1px solid var(--borda);
+  border-radius:7px;padding:6px;font-size:11px;cursor:pointer}
+.mini button:hover{background:#e2ebe0}
+#gps{right:10px;bottom:98px;width:42px;height:42px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;color:var(--tinta2)}
+.leaflet-bottom.leaflet-right .leaflet-control-zoom{margin:0 10px 148px 0;border:1px solid var(--borda);
+  border-radius:9px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.leaflet-control-zoom a{width:36px;height:36px;line-height:36px;font-size:20px;color:var(--tinta);background:var(--painel)}
+.leaflet-control-zoom a:hover{background:#eef6ef;color:var(--verde)}
+#gps svg{width:23px;height:23px}
+#gps.ativo{color:#1a73e8}
+#gps.livre{color:#7fa8d8}
+.gpspt{background:none;border:none}
+#editor{position:absolute;left:0;right:0;bottom:0;z-index:1300;background:var(--painel);
+  border-top:1px solid var(--borda);border-radius:15px 15px 0 0;box-shadow:0 -5px 22px rgba(0,0,0,.18);
+  padding:14px 18px 20px;transform:translateY(112%);transition:transform .2s ease;
+  max-height:72%;overflow:auto;max-width:520px;margin:0 auto}
+#editor.aberto{transform:none}
+#editor h3{font-size:14px;color:var(--tinta);display:flex;align-items:center;gap:8px;margin-bottom:6px}
+#editor h3 .fecha{margin-left:auto;background:none;border:none;font-size:22px;line-height:1;
+  color:var(--tinta2);cursor:pointer;padding:0 4px}
+.lin{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:9px 0;
+  font-size:13px;color:var(--tinta2);border-top:1px solid #eef1ec}
+.lin:first-child{border-top:none}
+.lin input[type=color]{width:46px;height:30px;border:1px solid var(--borda);border-radius:6px;
+  padding:0;background:none;cursor:pointer}
+.lin input[type=range]{width:140px;accent-color:var(--verde)}
+.lin input[type=checkbox]{width:19px;height:19px;accent-color:var(--verde)}
+#editor .ed-sep{margin:10px 0 2px;font-size:11px;font-weight:700;color:var(--verde);
+  text-transform:uppercase;letter-spacing:.4px;border-top:1px solid var(--borda);padding-top:9px}
+#ed-reset{margin-top:12px;width:100%;background:#eef3ec;color:var(--tinta2);border:1px solid var(--borda);
+  border-radius:8px;padding:9px;font-size:12px;cursor:pointer}
+#ed-reset:hover{background:#e2ebe0}
+.am.car{width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;color:var(--tinta2);
+  cursor:pointer;font-style:normal;font-size:11px;transform:rotate(90deg);transition:transform .15s}
+.am.car.fechado{transform:rotate(0deg)}
+.subleg{margin:0 0 5px 34px;display:flex;flex-direction:column;gap:4px}
+.subit{display:flex;align-items:center;gap:8px}
+.subit .am{flex:none}
+.subit span{font-size:11.5px;color:var(--tinta);line-height:1.2;word-break:break-word}
+.subit .tr{width:26px;height:0;border-top-width:3px;border-top-style:solid}
+.subit .pt{width:11px;height:11px;border-radius:50%;border-width:2px;border-style:solid;margin:0 6px}
+.subit .pg{width:20px;height:12px;border-width:2px;border-style:solid;margin:0 2px}
+.subit .im{width:20px;height:12px;background:linear-gradient(135deg,#8a8a5a,#5a7a4a);margin:0 2px;border-radius:2px}
+.subit .sv{width:20px;height:18px;margin:0 2px;display:flex;align-items:center;justify-content:center}
+.subit .sv img{max-width:18px;max-height:18px;object-fit:contain;display:block}
+#camadas-wrap{position:absolute;left:10px;bottom:10px;z-index:1001}
+#camadas-btn{width:42px;height:42px;border-radius:9px;border:1px solid var(--borda);background:var(--painel);
+  color:var(--tinta);cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center}
+#camadas-btn:hover{background:#eef6ef;color:var(--verde)}
+#camadas-menu{display:none;position:absolute;left:0;bottom:50px;background:var(--painel);border:1px solid var(--borda);
+  border-radius:10px;box-shadow:0 3px 14px rgba(0,0,0,.22);padding:6px;min-width:190px}
+#camadas-menu.aberto{display:block}
+#camadas-menu .cam-tit{font-size:10px;font-weight:700;color:var(--tinta2);text-transform:uppercase;letter-spacing:.5px;padding:6px 8px 4px}
+#camadas-menu .cam-op{display:flex;align-items:center;gap:9px;padding:8px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--tinta)}
+#camadas-menu .cam-op:hover{background:rgba(46,125,70,.10)}
+#camadas-menu .cam-op input{width:16px;height:16px;accent-color:var(--verde);margin:0}
+#tabelas-bar{position:absolute;left:10px;top:76px;z-index:1000;display:flex;flex-direction:column;gap:6px;align-items:flex-start;max-height:calc(100% - 150px);overflow-y:auto}
+.tb-toggle{background:var(--painel);border:1px solid var(--borda);border-radius:7px;color:var(--tinta);
+  font:600 11px/1 system-ui,sans-serif;padding:7px 11px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.14);
+  display:flex;align-items:center;gap:6px}
+.tb-toggle:hover{border-color:var(--verde);color:var(--verde)}
+.tb-toggle.on{background:var(--verde);color:#fff;border-color:var(--verde)}
+.tb-win{position:absolute;z-index:1100;background:var(--painel);border:1px solid var(--borda);border-radius:9px;
+  box-shadow:0 4px 18px rgba(0,0,0,.22);max-height:calc(100% - 24px);display:flex;flex-direction:column;overflow:hidden}
+.tb-win.escondido{display:none}
+.tb-win h4{margin:0;font:700 10.5px/1 system-ui,sans-serif;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--tinta2);padding:9px 10px;background:#f4f7f2;border-bottom:1px solid var(--borda);
+  cursor:move;display:flex;align-items:center;justify-content:space-between;gap:8px;user-select:none}
+.tb-win h4 .x{border:none;background:none;color:var(--tinta2);cursor:pointer;font-size:15px;line-height:1;padding:0 2px}
+.tb-win h4 .x:hover{color:var(--verde)}
+.tb-win h4 .tb-pega{flex:none;width:18px;height:18px;display:flex;align-items:center;justify-content:center;
+  color:#b7c3b8;cursor:grab;touch-action:none}
+.tb-win h4 .tb-pega:active{cursor:grabbing}
+.tb-win h4 .tb-pega svg{width:14px;height:14px;pointer-events:none}
+.tb-win h4 .tb-nome{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tb-scroll{overflow:auto;flex:1 1 auto;min-height:0}
+.tb-win table{border-collapse:collapse;font:11px/1.35 system-ui,sans-serif;white-space:nowrap}
+.tb-win th,.tb-win td{border:1px solid #e3e8df;padding:.28em .62em;text-align:left}
+.tb-win th{background:#eef3ea;color:var(--tinta2);position:sticky;top:0;font-weight:700}
+.tb-win th.th-ord{cursor:pointer;user-select:none;white-space:nowrap}
+.tb-win th.th-ord:hover{background:#e2ebe0;color:var(--verde)}
+.tb-win th.th-ord.ord{color:var(--verde)}
+.tb-win th .th-seta{display:inline-block;width:10px;margin-left:3px;font-size:9px;vertical-align:1px}
+.tb-win tbody tr{cursor:pointer}
+.tb-win tbody tr:nth-child(even){background:#fafcf9}
+.tb-win tbody tr:hover{background:#e8f2ea}
+.tb-win tbody tr.sel{background:#d4ead9!important;box-shadow:inset 3px 0 0 var(--verde)}
+.tb-win h4 .tb-zoom{flex:none;display:flex;gap:3px}
+.tb-win h4 .tb-zoom .tz{border:1px solid var(--borda);background:#fff;color:var(--tinta2);border-radius:5px;
+  font:700 10px/1 system-ui,sans-serif;padding:3px 6px;cursor:pointer;min-width:22px}
+.tb-win h4 .tb-zoom .tz:hover{border-color:var(--verde);color:var(--verde)}
+.tb-grip{position:absolute;right:1px;bottom:1px;width:20px;height:20px;cursor:nwse-resize;
+  touch-action:none;display:flex;align-items:flex-end;justify-content:flex-end;color:#aab6ab;padding:2px;z-index:2}
+.tb-grip:hover{color:var(--verde)}
+.tb-grip svg{pointer-events:none}
+@media (max-width:620px){#tabelas-bar{top:70px}.tb-win{max-width:calc(100% - 20px)}
+  #ferramentas .fbtn{width:37px;height:37px}
+  .leaflet-control-scale{bottom:62px!important}}
+@media (max-width:620px){#painel{width:212px;max-height:60%}#abrir{display:block}#painel.escondido{display:none}}
+#ferramentas{left:50%;bottom:14px;transform:translateX(-50%);flex-direction:row;gap:0;padding:4px;display:flex}
+#ferramentas .fbtn{width:40px;height:40px;border:none;background:none;color:var(--tinta2);border-radius:8px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center}
+#ferramentas .fbtn svg{width:21px;height:21px;pointer-events:none}
+#ferramentas .fbtn:hover{background:#eef6ef;color:var(--verde)}
+#ferramentas .fbtn.ativo{background:var(--verde);color:#fff}
+#ferramentas .sep{width:1px;height:26px;background:var(--borda);margin:0 3px;align-self:center}
+.med-label{background:#e8720c;color:#fff;font:700 11px/1.25 var(--mono);padding:2px 6px;border-radius:5px;
+  white-space:pre;box-shadow:0 1px 5px rgba(0,0,0,.28);border:none}
+.med-label.crt{background:var(--verde)}
+.leaflet-tooltip.med-label:before{display:none}
+.ferr-vertice{background:#fff;border:2px solid var(--verde);border-radius:50%;box-shadow:0 0 0 2px rgba(0,0,0,.18)}
+#mapa.desenhando{cursor:crosshair}
+#ferr-acao{position:absolute;left:50%;bottom:72px;transform:translateX(-50%);z-index:1400;display:none;gap:6px;
+  background:var(--painel);border:1px solid var(--borda);border-radius:11px;box-shadow:0 3px 16px rgba(0,0,0,.22);padding:6px}
+#ferr-acao.on{display:flex}
+#ferr-acao button{border:1px solid var(--borda);background:#eef3ec;color:var(--tinta);border-radius:8px;
+  padding:8px 13px;font-size:12px;font-weight:600;cursor:pointer}
+#ferr-acao button.ok{background:var(--verde);color:#fff;border-color:var(--verde)}
+#ferr-acao button.no{background:#fbeaea;color:#b3261e;border-color:#e6c9c9}
+#ferr-dica{position:absolute;left:50%;top:14px;transform:translateX(-50%);z-index:1400;display:none;
+  background:rgba(28,42,32,.92);color:#fff;font-size:12px;padding:6px 13px;border-radius:20px;pointer-events:none;white-space:nowrap}
+#ferr-dica.on{display:block}
+.med-pop button{margin-top:6px;width:100%;background:#fbeaea;color:#b3261e;border:1px solid #e6c9c9;
+  border-radius:6px;padding:5px;font-size:11px;font-weight:600;cursor:pointer}
+#carregador-dados{position:absolute;inset:0;background:rgba(255,255,255,0.95);z-index:2000;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px}
+</style>
+</head>
+<body>
+<div id="mapa"></div>
+
+<div id="carregador-dados">
+  <h3 style="color:var(--tinta)">Carregar Dados do Mapa</h3>
+  <p style="color:var(--tinta2);font-size:13px">Selecione o arquivo <b>.json</b> exportado pelo plugin do QGIS</p>
+  <button class="b" style="width:200px" onclick="document.getElementById('fl-dados').click()">Selecionar .json</button>
+  <input type="file" id="fl-dados" accept=".json,application/json" style="display:none">
+</div>
+
+<div class="cx" id="abrir">Camadas &#9662;</div>
+<div class="cx" id="painel">
+  <h2>Camadas<button class="recolher" id="recolher" title="Esconder">&#10005;</button></h2>
+  <div id="lista"></div>
+  <div class="rodape">
+    <label id="lb-rot"><input type="checkbox" id="ck-rot"> r&oacute;tulos</label>
+    <button class="b" id="bt-tudo">Ajustar &agrave; &aacute;rea</button>
+    <div class="mini">
+      <button id="bt-exp">salvar cores</button>
+      <button id="bt-imp">abrir cores</button>
+    </div>
+    <input type="file" id="fl-imp" accept=".json,application/json" style="display:none">
+  </div>
+  <div id="painel-grip" title="Arraste para redimensionar">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+      <path d="M3 17 L17 3 M8 17 L17 8 M13 17 L17 13"/></svg>
+  </div>
+</div>
+<div class="cx" id="titulo"></div>
+<div class="cx" id="norte">
+  <svg width="26" height="40" viewBox="0 0 26 40">
+    <path d="M13 3 L20 30 L13 24 L6 30 Z" fill="#1c2a20"/>
+    <text x="13" y="39" text-anchor="middle" font-size="10" font-weight="700"
+      font-family="sans-serif" fill="#1c2a20">N</text>
+  </svg>
+</div>
+<div class="cx" id="gps" title="Minha localiza&ccedil;&atilde;o">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <circle cx="12" cy="12" r="3.4" fill="currentColor" stroke="none"/>
+    <circle cx="12" cy="12" r="7.2"/>
+    <line x1="12" y1="1.3" x2="12" y2="4.6"/><line x1="12" y1="19.4" x2="12" y2="22.7"/>
+    <line x1="1.3" y1="12" x2="4.6" y2="12"/><line x1="19.4" y1="12" x2="22.7" y2="12"/>
+  </svg>
+</div>
+<div id="camadas-wrap">
+  <button id="camadas-btn" title="Camadas do mapa">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+  </button>
+  <div id="camadas-menu">
+    <div class="cam-tit">Fundo do mapa</div>
+    <label class="cam-op"><input type="radio" name="fundo" value="none" checked> Nenhum</label>
+    <label id="lb-sat" class="cam-op"><input type="radio" name="fundo" value="s"> Google Satellite</label>
+    <label class="cam-op"><input type="radio" name="fundo" value="y"> Google Hybrid</label>
+    <label class="cam-op"><input type="radio" name="fundo" value="m"> Google Road</label>
+    <label class="cam-op"><input type="radio" name="fundo" value="p"> Google Terrain</label>
+    <label class="cam-op"><input type="radio" name="fundo" value="h"> Google Labels</label>
+    <label class="cam-op"><input type="radio" name="fundo" value="t"> Google Traffic</label>
+    <input type="checkbox" id="ck-sat" style="display:none">
+  </div>
+</div>
+<div id="tabelas-bar"></div>
+<div id="tabelas-wins"></div>
+<div id="editor">
+  <h3><span id="ed-nome"></span><button class="fecha" id="ed-fecha">&times;</button></h3>
+  <div id="ed-campos"></div>
+  <button id="ed-reset">Restaurar cor original</button>
+</div>
+<div class="cx" id="ferramentas">
+  <button class="fbtn" data-ferr="poligono" title="Desenhar polígono (área)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3 L20 9 L17 20 L7 20 L4 9 Z"/></svg>
+  </button>
+  <button class="fbtn" data-ferr="linha" title="Desenhar linha (distância)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 L10 8 L15 15 L20 5"/><circle cx="4" cy="20" r="1.6" fill="currentColor"/><circle cx="20" cy="5" r="1.6" fill="currentColor"/></svg>
+  </button>
+  <button class="fbtn" data-ferr="ponto" title="Adicionar ponto">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s7-6.7 7-12A7 7 0 0 0 5 9c0 5.3 7 12 7 12Z"/><circle cx="12" cy="9" r="2.4" fill="currentColor" stroke="none"/></svg>
+  </button>
+  <div class="sep"></div>
+  <button class="fbtn" data-ferr="area" title="Medir área">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="1.5" stroke-dasharray="3 2.4"/><path d="M8 16 L16 8" stroke-dasharray="0"/></svg>
+  </button>
+  <button class="fbtn" data-ferr="distancia" title="Medir distância">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 L17 3 L21 7 L7 21 Z"/><path d="M8 12 L10 14 M11 9 L13 11 M14 6 L16 8"/></svg>
+  </button>
+  <button class="fbtn" data-ferr="raio" title="Medir raio">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="8.5"/><path d="M12 12 L20.5 12" stroke-dasharray="2.5 2"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>
+  </button>
+  <div class="sep"></div>
+  <button class="fbtn" data-ferr="limpar" title="Limpar desenhos/medições">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>
+  </button>
+</div>
+<div id="ferr-dica"></div>
+<div id="ferr-acao">
+  <button class="undo" id="ferr-undo">↶ Desfazer</button>
+  <button class="ok" id="ferr-ok">✓ Concluir</button>
+  <button class="no" id="ferr-cancel">✕ Cancelar</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+'use strict';
+var D = null;
+var mapa = L.map('mapa', {attributionControl:false, preferCanvas:true, zoomControl:false});
+L.control.zoom({position:'bottomright'}).addTo(mapa);
+var sat = null, itens = [], caixa = null;
+var PEGA = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
+
+function juntaLimites(b){
+  if(!b || !b.isValid()) return;
+  caixa = caixa ? caixa.extend(b) : L.latLngBounds(b.getSouthWest(), b.getNorthEast());
+}
+
+function inicializarMapaComDados(dados){
+  D = dados;
+  document.getElementById('carregador-dados').style.display = 'none';
+
+  D.rasters.forEach(function(r){
+    var ov = L.imageOverlay(r.url, r.limites, {className:'raster-suave'});
+    itens.push({nome:r.nome, tipo:'imagem', camada:ov, rot:null, ver:r.ver,
+      estilo:{op:1}, estiloOrig:{op:1}});
+    juntaLimites(L.latLngBounds(r.limites));
+  });
+
+  D.camadas.forEach(function(c){
+    var gr = L.layerGroup();
+    var setasLinha = [];
+    var g = L.geoJSON(c.dados, {
+      style: function(f){
+        var e = (f.properties && f.properties.__est) || c.estilo;
+        if(e.seta_linha || c.estilo.seta_linha){ return {stroke:false, fill:false, opacity:0, weight:0}; }
+        return {
+          color: e.color,
+          weight: e.weight || 2,
+          dashArray: e.dashArray || null,
+          fill: e.fill !== undefined ? e.fill : (c.tipo === 'poligono'),
+          fillColor: e.fillColor || e.color,
+          fillOpacity: e.fillOpacity !== undefined ? e.fillOpacity : 0.3
+        };
+      },
+      pointToLayer: function(f, ll){
+        var p = f.properties || {};
+        var e = p.__est || c.estilo;
+        if(e.marcador === 'img' && (e.img_b64 || c.estilo.img_b64)){
+          var b64 = e.img_b64 || c.estilo.img_b64;
+          var mk = L.marker(ll, {
+            icon: iconePontoImg(b64, p.__ang || 0, e.tam || c.estilo.tam || 22)
+          });
+          mk._ang = p.__ang || 0; mk._img = true; mk._imgB64 = b64; return mk;
+        }
+        if(e.marcador === 'seta' || c.estilo.marcador === 'seta'){
+          var mk = L.marker(ll, {icon: iconeSeta(e.fillColor || e.color,
+            p.__ang || 0, e.tam || c.estilo.tam || 18)});
+          mk._ang = p.__ang || 0; mk._seta = true; return mk;
+        }
+        return L.circleMarker(ll, {
+          radius: e.radius || 4,
+          color: e.color,
+          weight: e.weight || 1,
+          fillColor: e.fillColor || e.color,
+          fillOpacity: e.fillOpacity !== undefined ? e.fillOpacity : 0.9
+        });
+      },
+      onEachFeature: function(f, cam){
+        var p = f.properties || {}, linhas = [];
+        cam._cls = (p.__cls !== undefined && p.__cls !== null) ? p.__cls : null;
+        cam._fid = (p.__fid !== undefined) ? p.__fid : null;
+        cam._estVis = p.__est || c.estilo;
+        var _e = p.__est || c.estilo;
+        if((_e.seta_linha || c.estilo.seta_linha) && cam.getLatLngs){
+          setasDaLinha(cam, _e).forEach(function(m){ m._cls = cam._cls; setasLinha.push(m); });
+        }
+        for(var k in p){ if(k!=='__est' && k!=='__lbl' && k!=='__ang' && k!=='__cls' && p[k]!==null && p[k]!=='') linhas.push('<b>'+k+'</b>: '+p[k]); }
+        if(linhas.length) cam.bindPopup('<div style="font:12px/1.6 monospace">'+linhas.join('<br>')+'</div>');
+        var _rot = (p.__lbl!==undefined && p.__lbl!==null && p.__lbl!=='') ? p.__lbl
+          : ((c.rotulo && c.rotulo!=='__lbl' && p[c.rotulo]!==undefined && p[c.rotulo]!==null && p[c.rotulo]!=='') ? p[c.rotulo] : null);
+        if(_rot!==null){
+          var pos = cam.getBounds ? cam.getBounds().getCenter() : cam.getLatLng();
+          var mrot = L.marker(pos, {icon: iconeRot(_rot, c.estilo)});
+          mrot._rotTxt = _rot; mrot.addTo(gr);
+        }
+      }
+    });
+    setasLinha.forEach(function(m){ g.addLayer(m); });
+    try{ if(c.dados.features.length) juntaLimites(g.getBounds()); }catch(e){}
+    var _fidx = {};
+    g.eachLayer(function(l){ if(l._fid!==undefined && l._fid!==null) _fidx[l._fid]=l; });
+    (c.legenda||[]).forEach(function(en){ if(en) en.estiloOrig = JSON.parse(JSON.stringify(en.estilo||{})); });
+    itens.push({nome:c.nome, tipo:c.tipo, camada:g, rot:gr, ver:c.ver, estilo:c.estilo,
+      estiloOrig: JSON.parse(JSON.stringify(c.estilo)), legenda: c.legenda||[], aberto:true,
+      clsOn: (c.legenda||[]).map(function(){ return true; }),
+      tabela: !!c.tabela, campos: c.campos||[], fidx: _fidx, dados: c.dados,
+      temRot: gr.getLayers().length>0});
+  });
+
+  itens.slice().reverse().forEach(function(it){ if(it.ver) it.camada.addTo(mapa); });
+  if(caixa) mapa.fitBounds(caixa, {padding:[24,24]}); else mapa.setView([-22.6,-51.0], 13);
+  
+  montaLista();
+  religaCheckesEEd();
+  document.getElementById('titulo').innerHTML = (D.logo ? '<img src="'+D.logo+'">' : '') + '<b>'+D.titulo+'</b>';
+}
+
+// Tenta carregar dados.json automaticamente no GitHub Pages
+fetch('dados.json')
+  .then(function(res){ if(res.ok) return res.json(); throw new Error('sem dados.json'); })
+  .then(function(dados){ inicializarMapaComDados(dados); })
+  .catch(function(){ /* aguarda upload manual do .json */ });
+
+document.getElementById('fl-dados').addEventListener('change', function(e){
+  var f = e.target.files[0];
+  if(!f) return;
+  var rd = new FileReader();
+  rd.onload = function(){
+    try{ inicializarMapaComDados(JSON.parse(rd.result)); }
+    catch(err){ alert('Arquivo JSON invalido.'); }
+  };
+  rd.readAsText(f);
+});
+
+function iconeSeta(cor, ang, tam){
+  var s = tam || 16;
+  cor = cor || '#333';
+  return L.divIcon({className:'seta', iconSize:[s,s], iconAnchor:[s/2, s/2],
+    html:'<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" style="display:block;transform:rotate('+ang+'deg)">'+
+      '<path d="M12 1 L20.5 12 L14.5 12 L14.5 22.5 L9.5 22.5 L9.5 12 L3.5 12 Z" fill="'+cor+'" stroke="none"/></svg>'});
+}
+function iconePontoImg(b64, ang, tam){
+  var s = tam || 22;
+  return L.divIcon({className:'img-marker', iconSize:[s,s], iconAnchor:[s/2, s/2],
+    html:'<img src="data:image/png;base64,'+b64+'" style="width:'+s+'px;height:'+s+'px;display:block;transform:rotate('+(ang||0)+'deg);pointer-events:none;">'});
+}
+function iconeRot(txt, e){
+  var ct=(e&&e.rot_cor)||'#ffffff', cb=(e&&e.rot_bg)||'#e8720c', tam=(e&&e.rot_tam)?e.rot_tam:10;
+  return L.divIcon({className:'', iconSize:null, html:'<div class="rot" style="color:'+ct+';background:'+cb+';font-size:'+tam+'px">'+txt+'</div>'});
+}
+function amostraFor(tipo, e){
+  e = e || {};
+  if(tipo==='imagem') return '<i class="am im"></i>';
+  if(tipo==='ponto' && e.marcador==='img' && e.img_b64) return '<i class="am sv"><img src="data:image/png;base64,'+e.img_b64+'"></i>';
+  if(tipo==='ponto') return '<i class="am pt" style="border-color:'+e.color+';background:'+(e.fillColor||e.color)+'"></i>';
+  if(tipo==='poligono') return '<i class="am pg" style="border-color:'+e.color+';background:'+(e.fill?e.fillColor:'transparent')+'"></i>';
+  return '<i class="am tr" style="border-top-color:'+e.color+';border-top-width:'+Math.max(2, e.weight||2)+'px"></i>';
+}
+function amostraHTML(it){ return amostraFor(it.tipo, it.estilo); }
+
+var LAPIS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L18.5 9.5a2 2 0 0 0-3-3L5 17z"/><path d="M14 6l3 3"/></svg>';
+var OLHO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>';
+var OLHO_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+var lista = document.getElementById('lista');
+function montaLista(){
+  lista.innerHTML = itens.map(function(it, i){
+    return '<div class="cam" data-linha="'+i+'"><label><input type="checkbox" data-i="'+i+'"'+(it.ver?' checked':'')+'>'+amostraHTML(it)+'<span>'+it.nome+'</span></label></div>';
+  }).join('');
+}
+function religaCheckesEEd(){
+  lista.querySelectorAll('.cam input[type=checkbox]').forEach(function(el){
+    el.addEventListener('change', function(){
+      var it = itens[+el.dataset.i];
+      it.ver = el.checked;
+      if(el.checked) it.camada.addTo(mapa); else mapa.removeLayer(it.camada);
+    });
+  });
+}
+document.getElementById('bt-tudo').addEventListener('click', function(){ if(caixa) mapa.fitBounds(caixa); });
+
+// GPS
+var btGps = document.getElementById('gps'), gpsOn = false, mkPos = null;
+btGps.addEventListener('click', function(){
+  if(!gpsOn){
+    gpsOn = true; btGps.classList.add('ativo');
+    mapa.locate({watch:true, enableHighAccuracy:true});
+  } else {
+    gpsOn = false; btGps.classList.remove('ativo');
+    mapa.stopLocate(); if(mkPos) mapa.removeLayer(mkPos);
+  }
+});
+mapa.on('locationfound', function(e){
+  if(!mkPos) mkPos = L.marker(e.latlng).addTo(mapa);
+  else mkPos.setLatLng(e.latlng);
+  mapa.setView(e.latlng, 16);
+});
+</script>
+</body>
+</html>
